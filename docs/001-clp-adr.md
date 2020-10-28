@@ -12,27 +12,69 @@
 This ADR contains a summary of decisions taken during the implementation of the clp module and a summary of the final outcome
 ### Summary
 
-For the Sifchain MVP ,CLP provides a module  
+For the Sifchain MVP ,CLP module provides the following functionalities 
+- Create New Liquidity Pool
+- Add Liquidity to an Existing Liquidity pool 
+- Remove Liquidity from an Existing Liquidity pool 
+- Swap tokens  
+        -Swap an External token for Native or vice versa (single swap)    
+        -Swap an External token for another External Token (double swap) 
+- Decommission an Existing Liquidity pool 
 
-### Pros and Cons
+### Basic Terminology 
+-Asset : An asset is most basic unit of a CLP . It Contains source chain, symbol and ticker to identify a token .
+```golang
+SourceChain: ETHEREUM
+Symbol: ETH
+Ticker: ceth
 
-1. Seperate Ledger Solution
-
-Pros: Peggy and Sifnode can develop and extend seperately, totally decoupled. Peggy can be focused on recording cross chain assets transfers with its own validator set, tokenized incentives for maintaining consensus, and its own native token.  This validator set would be dedicated to supporting other Cosmos SDK chains besides Sifchain.
-
-Cons: Peggy and Sifnode would need IBC support, which is not currently used in any production environment yet.  Sifchain users who want to swap or pool with an Ethereum token would need two transactions.  The first would be transferring an asset from Ethereum to Peggy's peg zone.  The second would be transferring the pegged asset from the peg zone to Sifchain via IBC.
-
-2. Shared Ledger Solution
-
-Pros: It is much easier to deploy and maintenence since all operations like cross-chain token transfer, adding liquidity, and swapping tokens would be processed by a single chain.  There would be no dependency on IBC.
-
-Cons: For the long term, the system is hard to scale out. For example, all Sifnode operators would also need to deploy a Ethereum node process Ethereum's high gas fees.  This increases the labor costs of running a Sifnode validator in a way that is unsustainable as Sifchain bridges to more blockchains besides Ethereum.
-
-## Decision
-We choose the second solution to implement now. The major reason is the IBC still in development and not mature enough for production usage at this time. We will keep our eyes on the maturity of IBC and make a switch when we judge it is ready.
-
-We will decouple the cross-chain transfer functions (native to Peggy) and liquidity and swap (native to Sifnode) at the module level. This will make it easier for us to update to IBC when needed
-
+SourceChain: SIFCHAIN
+Symbol: RWN
+Ticker: rwn
+```
+-Pool  : Every Liquidity pool for CLP is created by pairing an External asset with the Native asset .
+````golang
+ExternalAsset: SourceChain: ETHEREUM
+              Symbol: ETH
+              Ticker: ceth
+ExternalAssetBalance: 1000
+NativeAssetBalance: 1000
+PoolUnits : 1000
+PoolAddress :sif1vdjxzumgtae8wmstpv9skzctpv9skzct72zwra
+````
+-Liquidity provider : Any user adding liquidity to a pool becomes a liquidity provider for that pool. 
+````golang
+ExternalAsset: SourceChain: ETHEREUM
+               Symbol: ETH
+               Ticker: ceth
+LiquidityProviderUnits: 1000
+liquidityOroviderAddress: sif15tyrwghfcjszj7sckxvqh0qpzprup9mhksmuzm 
+````
+    
+## Decisions
+ - **Create new liquidity pool**
+    - Creating a pool has a minimum threshold for the amount of liquidity provided. This is a genensis parameter and can be tweaked later.
+    - The user who creates a new pool automatically becomes its first liquidity provider.
+ - **Decommission a liquidity pool** 
+    - Decommission requires the net balance of the pool to be under the minimum threshold . 
+    - If successful a decommission transaction returns balances to its liquidity providers and deletes the liquidity pool. 
+ - **Add Liquidity to a pool** 
+    - User can add liquidity to the native and external tokens 
+ - **Remove liquidity**
+    - Remove liquidity consists of a composition of withdraw , and a swap if required
+    - Liquidity can be removed in three ways
+    
+        -Native and external - Withdraw to native and external tokens .   
+        -Only Native -  Withdraw to native and external tokens ,and then a swap from external to native.   
+        -Only External  - Withdraw to native and external tokens ,and then a swap from native to external.   
+   - For asymmetric removal , (option 2 and 3), the user incurs a tradeslip and liquidity fee similar to a swap.
+ - **Swap**
+    
+    - The system supports two types of swaps          
+        -Swap between external and native tokens - This is a single swap        
+        -Swap between external and external tokens - This swap is combination of two single swaps.
+        
+    - A double swap also includes a transfer between the two pools to maintain pool balances.
 ## Consequences
 
 ### Positive
